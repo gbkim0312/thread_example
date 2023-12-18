@@ -1,0 +1,149 @@
+{
+    "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "port",
+            "type": "pickString",
+            "description": "Port of the device",
+            "options": [
+                "103",
+                "104",
+                "119",
+                "121",
+                "125",
+                "127"
+            ],
+            "default": "119"
+        },
+        {
+            "id": "targetDir",
+            "type": "promptString",
+            "description": "target directory",
+            "default": "/dev/test/camp122"
+        },
+        {
+            "id": "hostUser",
+            "type": "promptString",
+            "description": "SSH ID",
+            "default": "root"
+        },
+        {
+            "id": "command",
+            "type": "promptString",
+            "description": "SSH ID",
+            "default": "LD_LIBRARY_PATH=lib ./sample/cryptofunction_test --gtest_filter=p/TestECIES.HW2SWECIESEncDec/SM2_* trace"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "[SP] clear packages",
+            "type": "shell",
+            "command": "rm -rf ${command:cmake.buildDirectory}/AutocryptV2X*.tar.gz || true",
+            "group": "none"
+        },
+        {
+            "label": "[SP] make packages",
+            "command": "make -j package",
+            "type": "shell",
+            "options": {
+                "cwd": "${command:cmake.buildDirectory}"
+            },
+            "group": "none",
+            "dependsOn": [
+                "[SP] clear packages"
+            ]
+        },
+        {
+            "label": "[SP] clear remote",
+            "command": "ssh -p ${input:port} ${input:hostUser}@${config:host} rm -rf '${input:targetDir}' && ssh -p ${input:port} ${input:hostUser}@${config:host} mkdir -p '${input:targetDir}'",
+            "type": "shell",
+            "options": {
+                "cwd": "${command:cmake.buildDirectory}"
+            },
+            "group": "none",
+            "dependsOn": [
+                "[SP] make packages"
+            ]
+        },
+        {
+            "label": "[SP] push packages to remote",
+            "command": "scp -P ${input:port} ./AutocryptV2X*rel.tar.gz ${input:hostUser}@${config:host}:${input:targetDir} && scp -P ${input:port} ./AutocryptV2X*dev.tar.gz ${input:hostUser}@${config:host}:${input:targetDir}",
+            "type": "shell",
+            "options": {
+                "cwd": "${command:cmake.buildDirectory}"
+            },
+            "group": "none",
+            "dependsOn": [
+                "[SP] clear remote"
+            ]
+        },
+        {
+            "label": "[SP] untar packages in remote",
+            "command": "ssh -p ${input:port} ${input:hostUser}@${config:host} 'cd ${input:targetDir} && tar xvzf AutocryptV2X*rel.tar.gz && tar xvzf AutocryptV2X*dev.tar.gz'",
+            "type": "shell",
+            "options": {
+                "cwd": "${command:cmake.buildDirectory}"
+            },
+            "group": "none",
+            "dependsOn": [
+                "[SP] push packages to remote"
+            ]
+        },
+        {
+            "label": "[SP] test packages in remote",
+            "command": "ssh -p ${input:port} ${input:hostUser}@${config:host} 'cd ${input:targetDir} && ${input:command}'",
+            "type": "shell",
+            "options": {
+                "cwd": "${command:cmake.buildDirectory}"
+            },
+            "group": "none",
+            "dependsOn": [
+                "[SP] untar packages in remote"
+            ]
+        },
+        {
+            "label": "start_remote_gdb",
+            "type": "shell",
+            "isBackground": true,
+            "command": "ssh -p 125 root@ee 'cd /home/root/ext-fs/dev/penta/ydt3957_test && LD_LIBRARY_PATH=lib /home/root/ext-fs/usr/bin/gdbserver --once :9125 ./sample/autocryptv2x_test'",
+            "problemMatcher": [
+                {
+                    "pattern": [
+                        {
+                            "regexp": ".",
+                            "file": 1,
+                            "location": 2,
+                            "message": 3
+                        }
+                    ],
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": ".",
+                        "endsPattern": "."
+                    }
+                }
+            ]
+        },
+        {
+            "type": "cppbuild",
+            "label": "C/C++: clang 활성 파일 빌드",
+            "command": "/usr/bin/clang",
+            "args": [
+                "-fcolor-diagnostics",
+                "-fansi-escape-codes",
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+            "detail": "디버거에서 생성된 작업입니다."
+        }
+    ]
+}
